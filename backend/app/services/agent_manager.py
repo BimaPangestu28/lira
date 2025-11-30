@@ -37,7 +37,12 @@ class AgentManager:
         @param level - CEFR level
         """
         room_name = f"lira-{session_id}"
-        await self.worker.connect_to_room(room_name, mode=mode, level=level)
+        await self.worker.connect_to_room(
+            room_name,
+            session_id=session_id,
+            mode=mode,
+            level=level,
+        )
 
     async def stop_agent(self, session_id: UUID):
         """

@@ -2,8 +2,8 @@
 
 from enum import Enum
 from functools import lru_cache
-from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     app_name: str = "LIRA"
     debug: bool = False
     port: int = 8011
+    log_level: str = "INFO"
 
     # LiveKit
     livekit_url: str = ""
@@ -54,6 +55,43 @@ class Settings(BaseSettings):
 
     # Session
     session_ttl_seconds: int = 3600  # 1 hour
+
+    # CORS
+    cors_origins: list[str] = ["http://localhost:3000"]
+
+    @model_validator(mode="after")
+    def validate_required_settings(self):
+        """Validate required settings are present."""
+        errors = []
+
+        # LiveKit is required
+        if not self.livekit_url:
+            errors.append("LIVEKIT_URL is required")
+        if not self.livekit_api_key:
+            errors.append("LIVEKIT_API_KEY is required")
+        if not self.livekit_api_secret:
+            errors.append("LIVEKIT_API_SECRET is required")
+
+        # Deepgram is required
+        if not self.deepgram_api_key:
+            errors.append("DEEPGRAM_API_KEY is required")
+
+        # LLM provider validation
+        if self.llm_provider == LLMProvider.OPENAI:
+            if not self.openai_api_key:
+                errors.append("OPENAI_API_KEY is required when using OpenAI provider")
+        elif self.llm_provider == LLMProvider.AZURE_OPENAI:
+            if not self.azure_openai_api_key:
+                errors.append("AZURE_OPENAI_API_KEY is required when using Azure OpenAI")
+            if not self.azure_openai_endpoint:
+                errors.append("AZURE_OPENAI_ENDPOINT is required when using Azure OpenAI")
+            if not self.azure_openai_deployment_name:
+                errors.append("AZURE_OPENAI_DEPLOYMENT_NAME is required when using Azure OpenAI")
+
+        if errors:
+            raise ValueError(f"Configuration errors: {'; '.join(errors)}")
+
+        return self
 
 
 @lru_cache

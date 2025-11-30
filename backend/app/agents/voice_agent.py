@@ -4,12 +4,14 @@ import asyncio
 import random
 import time
 from typing import Callable
+from uuid import UUID
 
 from livekit import rtc
 
 from app.agents.conversation import ConversationAgent
 from app.services.deepgram_stt import DeepgramSTTService
 from app.services.deepgram_tts import DeepgramTTSService
+from app.services.analytics import analytics_service
 
 
 # Filler phrases to play while LLM is generating
@@ -35,6 +37,7 @@ class VoiceAgent:
     def __init__(
         self,
         room: rtc.Room,
+        session_id: UUID,
         mode: str = "free_talk",
         level: str = "B1",
         on_transcription: Callable[[str, bool], None] | None = None,
@@ -44,12 +47,14 @@ class VoiceAgent:
         Initialize the voice agent.
 
         @param room - LiveKit room instance
+        @param session_id - Session UUID for analytics tracking
         @param mode - Conversation mode (free_talk, corrective, roleplay, guided)
         @param level - CEFR level (A2, B1, B2, C1)
         @param on_transcription - Callback for user speech transcription
         @param on_response - Callback for agent responses
         """
         self.room = room
+        self.session_id = session_id
         self.mode = mode
         self.level = level
 
@@ -275,6 +280,39 @@ class VoiceAgent:
                 break
         print("[TTS] Queue cleared")
 
+    def _count_words(self, text: str) -> int:
+        """Count words in text."""
+        return len(text.split())
+
+    def _detect_correction(self, response: str) -> bool:
+        """Detect if response contains a correction."""
+        correction_patterns = [
+            "you could say",
+            "you might say",
+            "better to say",
+            "instead of",
+            "correct way",
+            "should be",
+            "try saying",
+            "more natural",
+        ]
+        response_lower = response.lower()
+        return any(pattern in response_lower for pattern in correction_patterns)
+
+    async def _track_analytics(self, user_text: str, agent_response: str):
+        """Track conversation analytics."""
+        user_words = self._count_words(user_text)
+        agent_words = self._count_words(agent_response)
+        has_correction = self._detect_correction(agent_response)
+
+        await analytics_service.update_session(
+            session_id=self.session_id,
+            user_words=user_words,
+            agent_words=agent_words,
+            correction=has_correction,
+        )
+        print(f"[Analytics] User: {user_words} words, Agent: {agent_words} words, Correction: {has_correction}")
+
     async def _process_response(self):
         """Process pending text and generate streaming LLM response."""
         if not self._pending_text:
@@ -345,6 +383,9 @@ class VoiceAgent:
             print(f"[LLM] Complete: {full_response}")
             if self.on_response:
                 self.on_response(full_response)
+
+            # Track analytics for this turn
+            await self._track_analytics(text, full_response)
 
         except asyncio.CancelledError:
             # User interrupted - this is expected, don't treat as error

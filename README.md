@@ -123,6 +123,30 @@ NEXT_PUBLIC_API_URL=http://localhost:8011
 | **Roleplay** | Practice scenarios (job interview, restaurant, etc.) |
 | **Guided** | Structured practice with questions |
 
+## Analytics API
+
+Track learning progress and user statistics:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/analytics/sessions/{session_id}` | GET | Get session analytics |
+| `/api/analytics/users/{user_id}` | POST | Create or get user profile |
+| `/api/analytics/users/{user_id}` | GET | Get user profile |
+| `/api/analytics/users/{user_id}/stats` | GET | Get user statistics |
+| `/api/analytics/users/{user_id}/preferences` | PATCH | Update preferences |
+
+Session metrics tracked:
+- Total turns and messages
+- Words spoken (user & agent)
+- Corrections made
+- Session duration
+
+User profile features:
+- Practice streaks
+- Total practice time
+- Preferred mode/level
+- Recent sessions
+
 ## Project Structure
 
 ```
@@ -145,13 +169,55 @@ lira/
 └── README.md
 ```
 
+## Docker Deployment
+
+### Quick Start with Docker Compose
+
+```bash
+# Copy environment template
+cp .env.example .env
+# Edit .env with your API keys
+
+# Build and run
+docker-compose up -d
+
+# View logs
+docker-compose logs -f backend
+```
+
+### Production Deployment
+
+```bash
+# Build production image
+docker build -t lira-backend ./backend
+
+# Run with external Redis
+docker run -d \
+  --name lira-backend \
+  -p 8011:8011 \
+  -e REDIS_URL=redis://your-redis:6379 \
+  -e LIVEKIT_URL=wss://your-livekit.com \
+  -e LIVEKIT_API_KEY=your-key \
+  -e LIVEKIT_API_SECRET=your-secret \
+  -e DEEPGRAM_API_KEY=your-key \
+  -e OPENAI_API_KEY=your-key \
+  lira-backend
+```
+
+### Health Checks
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/health` | Basic health + dependency status |
+| `GET /api/health/ready` | Readiness check for K8s |
+
 ## Development Roadmap
 
 - [x] **P0** - Audio pipeline (LiveKit ↔ Deepgram STT ↔ TTS)
 - [x] **P1** - LangGraph + LLM response logic
 - [x] **P2** - Filler audio for natural latency masking
-- [ ] **P3** - Analytics + persistent user profiles
-- [ ] **P4** - Production optimization & deployment
+- [x] **P3** - Analytics + persistent user profiles
+- [x] **P4** - Production optimization & deployment
 
 ## License
 

@@ -43,6 +43,7 @@ class Session(BaseModel):
     """Complete session state."""
 
     session_id: UUID = Field(default_factory=uuid4)
+    user_id: str | None = None
     mode: AgentMode = AgentMode.FREE_TALK
     level: CEFRLevel = CEFRLevel.B1
     history: list[Message] = Field(default_factory=list)
@@ -54,6 +55,7 @@ class SessionCreate(BaseModel):
 
     mode: AgentMode = AgentMode.FREE_TALK
     level: CEFRLevel = CEFRLevel.B1
+    user_id: str | None = None
 
 
 class SessionResponse(BaseModel):

@@ -2,6 +2,7 @@
 
 import asyncio
 import signal
+from uuid import UUID
 
 from livekit import api, rtc
 
@@ -27,6 +28,7 @@ class AgentWorker:
     async def connect_to_room(
         self,
         room_name: str,
+        session_id: UUID,
         mode: str = "free_talk",
         level: str = "B1",
     ) -> VoiceAgent:
@@ -34,6 +36,7 @@ class AgentWorker:
         Connect to a LiveKit room and create a voice agent.
 
         @param room_name - Name of the room to join
+        @param session_id - Session UUID for analytics tracking
         @param mode - Conversation mode
         @param level - CEFR level
         @returns VoiceAgent instance
@@ -64,6 +67,7 @@ class AgentWorker:
         # Create and start voice agent
         agent = VoiceAgent(
             room=room,
+            session_id=session_id,
             mode=mode,
             level=level,
             on_transcription=lambda t, f: print(f"[STT] {'✓' if f else '...'} {t}"),

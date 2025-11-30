@@ -6,7 +6,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
+from app.api.analytics_routes import router as analytics_router
 from app.core.config import get_settings
+from app.core.logging import setup_logging, get_logger
+
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -14,10 +18,13 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler for startup and shutdown events."""
     # Startup
     settings = get_settings()
-    print(f"Starting {settings.app_name} on port {settings.port}")
+    setup_logging(log_level=settings.log_level, json_logs=not settings.debug)
+    logger.info(f"Starting {settings.app_name} on port {settings.port}")
+    logger.info(f"Debug mode: {settings.debug}")
+    logger.info(f"LLM provider: {settings.llm_provider.value}")
     yield
     # Shutdown
-    print("Shutting down LIRA")
+    logger.info("Shutting down LIRA")
 
 
 def create_app() -> FastAPI:
@@ -34,7 +41,7 @@ def create_app() -> FastAPI:
     # CORS middleware
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000"],  # Next.js dev server
+        allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -42,6 +49,7 @@ def create_app() -> FastAPI:
 
     # Include routers
     app.include_router(router, prefix="/api")
+    app.include_router(analytics_router, prefix="/api")
 
     return app
 

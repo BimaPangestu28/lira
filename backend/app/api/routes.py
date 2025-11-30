@@ -14,6 +14,7 @@ from app.models.session import (
 )
 from app.services.livekit import create_room_token
 from app.services.agent_manager import agent_manager
+from app.services.analytics import analytics_service
 from app.core.config import get_settings
 
 router = APIRouter()
@@ -28,7 +29,50 @@ ws_connections: dict[UUID, WebSocket] = {}
 @router.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "service": "lira-backend"}
+    settings = get_settings()
+
+    # Check Redis connectivity
+    redis_status = "unknown"
+    try:
+        r = await analytics_service._get_redis()
+        if r:
+            await r.ping()
+            redis_status = "connected"
+        else:
+            redis_status = "fallback_memory"
+    except Exception:
+        redis_status = "disconnected"
+
+    return {
+        "status": "healthy",
+        "service": "lira-backend",
+        "version": "0.1.0",
+        "dependencies": {
+            "redis": redis_status,
+            "llm_provider": settings.llm_provider.value,
+        },
+    }
+
+
+@router.get("/health/ready")
+async def readiness_check():
+    """Readiness check for Kubernetes."""
+    settings = get_settings()
+
+    # Verify critical services
+    checks = {
+        "config": True,
+        "livekit": bool(settings.livekit_url and settings.livekit_api_key),
+        "deepgram": bool(settings.deepgram_api_key),
+        "llm": bool(settings.openai_api_key or settings.azure_openai_api_key),
+    }
+
+    all_ready = all(checks.values())
+
+    return {
+        "ready": all_ready,
+        "checks": checks,
+    }
 
 
 @router.post("/sessions", response_model=SessionResponse)
@@ -36,8 +80,20 @@ async def create_session(request: SessionCreate):
     """Create a new conversation session and return LiveKit credentials."""
     settings = get_settings()
 
-    session = Session(mode=request.mode, level=request.level)
+    session = Session(
+        mode=request.mode,
+        level=request.level,
+        user_id=request.user_id,
+    )
     sessions[session.session_id] = session
+
+    # Start analytics tracking for this session
+    await analytics_service.start_session(
+        session_id=session.session_id,
+        mode=session.mode,
+        level=session.level,
+        user_id=session.user_id,
+    )
 
     # Generate LiveKit token for this session
     token = create_room_token(
@@ -93,12 +149,20 @@ async def end_session(session_id: UUID):
     # Stop the agent
     await agent_manager.stop_agent(session_id)
 
+    # Finalize analytics and get session summary
+    session_analytics = await analytics_service.end_session(session_id)
+
     # Close WebSocket if connected
     ws = ws_connections.pop(session_id, None)
     if ws:
         await ws.close()
 
-    return {"session_id": session_id, "status": "ended", "metrics": session.metrics}
+    return {
+        "session_id": session_id,
+        "status": "ended",
+        "metrics": session.metrics,
+        "analytics": session_analytics.model_dump() if session_analytics else None,
+    }
 
 
 @router.websocket("/sessions/{session_id}/ws")
